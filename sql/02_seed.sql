@@ -6,6 +6,12 @@
 
 USE vitegourmand;
 
+-- Force le charset client sur utf8mb4 pour préserver les accents
+-- même quand le seed est importé depuis un terminal Windows / phpMyAdmin
+-- dont la connexion par défaut serait en latin1.
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+SET CHARACTER SET utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE plat_allergene;
 TRUNCATE TABLE menu_plat;
