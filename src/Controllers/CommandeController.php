@@ -1,4 +1,10 @@
 <?php
+/**
+ * CommandeController — Couche HTTP : reçoit la requête, délègue au CommandeService.
+ *
+ * Aucun calcul métier, aucune requête SQL : ce controller orchestre uniquement
+ * l'entrée HTTP, la validation CSRF/auth, et la sortie (redirect / JSON / vue).
+ */
 declare(strict_types=1);
 
 namespace App\Controllers;
@@ -6,23 +12,28 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Mailer;
-use App\Models\Commande;
-use App\Models\Menu;
-use App\Models\Stats;
-use App\Models\User;
+use App\Repositories\MenuRepository;
+use App\Repositories\UserRepository;
+use App\Services\CommandeService;
+use DomainException;
 
 final class CommandeController extends Controller
 {
+    public function __construct(private CommandeService $service = new CommandeService()) {}
+
+    /**
+     * Affiche le formulaire de commande pour un menu donné.
+     */
     public function showForm(string $menu_id): void
     {
         Auth::requireLogin();
-        $menu = Menu::find((int) $menu_id);
+        $menu = MenuRepository::find((int) $menu_id);
         if (!$menu || !$menu['actif']) {
             $this->flash('error', 'Menu introuvable.');
             $this->redirect('/menus');
         }
 
-        $user = User::findById((int) Auth::id());
+        $user = UserRepository::findById((int) Auth::id());
 
         $this->view('commande/form', [
             'pageTitle' => 'Commander : ' . $menu['titre'],
@@ -32,88 +43,66 @@ final class CommandeController extends Controller
     }
 
     /**
-     * Endpoint JSON pour calcul prix dynamique côté client.
+     * Endpoint JSON pour le calcul de prix dynamique côté client (utilisé par fetch JS).
      */
     public function apiCalculPrix(): void
     {
         Auth::requireLogin();
-        $menu = Menu::find((int) ($_POST['menu_id'] ?? 0));
-        if (!$menu) {
-            $this->json(['error' => 'Menu introuvable'], 404);
+        try {
+            $prix = $this->service->previewPrix(
+                (int)   ($_POST['menu_id'] ?? 0),
+                (int)   ($_POST['nombre_personne'] ?? 0),
+                trim((string) ($_POST['ville_livraison'] ?? '')),
+                (float) ($_POST['distance_km'] ?? 0),
+            );
+            $this->json($prix);
+        } catch (DomainException $e) {
+            $this->json(['error' => $e->getMessage()], 400);
         }
-
-        $nbPersonnes = (int) ($_POST['nombre_personne'] ?? 0);
-        $ville       = trim((string) ($_POST['ville_livraison'] ?? ''));
-        $distance    = (float) ($_POST['distance_km'] ?? 0);
-
-        if ($nbPersonnes < $menu['nombre_personne_minimum']) {
-            $this->json(['error' => 'Nombre de personnes inférieur au minimum requis (' . $menu['nombre_personne_minimum'] . ').'], 400);
-        }
-
-        $prix = Commande::calculerPrix($menu, $nbPersonnes, $ville, $distance);
-        $this->json($prix);
     }
 
+    /**
+     * Soumission du formulaire de commande — délègue la création au service.
+     */
     public function submit(): void
     {
         Auth::requireLogin();
         $this->verifyCsrf();
 
-        $menu = Menu::find((int) ($_POST['menu_id'] ?? 0));
-        if (!$menu || !$menu['actif']) {
-            $this->flash('error', 'Menu introuvable.');
-            $this->redirect('/menus');
+        try {
+            $result = $this->service->creerCommande([
+                'menu_id'            => $_POST['menu_id'] ?? 0,
+                'date_prestation'    => $this->input('date_prestation'),
+                'heure_livraison'    => $this->input('heure_livraison'),
+                'adresse_livraison'  => $this->input('adresse_livraison'),
+                'ville_livraison'    => $this->input('ville_livraison'),
+                'nombre_personne'    => $_POST['nombre_personne'] ?? 0,
+                'distance_km'        => $_POST['distance_km'] ?? 0,
+            ], (int) Auth::id());
+        } catch (DomainException $e) {
+            $this->flash('error', $e->getMessage());
+            $this->redirect('/commander/' . (int) ($_POST['menu_id'] ?? 0));
         }
 
-        $datePrestation = $this->input('date_prestation');
-        $heureLivraison = $this->input('heure_livraison');
-        $adresse        = $this->input('adresse_livraison');
-        $ville          = $this->input('ville_livraison');
-        $nbPersonnes    = (int) ($_POST['nombre_personne'] ?? 0);
-        $distanceKm     = (float) ($_POST['distance_km'] ?? 0);
+        // Envoi du mail de confirmation (effet de bord HTTP)
+        $this->envoyerMailConfirmation($result, Auth::user());
 
-        if (empty($datePrestation) || empty($heureLivraison) || empty($adresse) || empty($ville)) {
-            $this->flash('error', 'Tous les champs sont obligatoires.');
-            $this->redirect('/commander/' . $menu['menu_id']);
-        }
-        if ($nbPersonnes < $menu['nombre_personne_minimum']) {
-            $this->flash('error', 'Le nombre de personnes minimum est de ' . $menu['nombre_personne_minimum'] . '.');
-            $this->redirect('/commander/' . $menu['menu_id']);
-        }
-        if ($menu['quantite_restante'] <= 0) {
-            $this->flash('error', 'Désolé, ce menu n\'est plus disponible.');
-            $this->redirect('/menus');
-        }
-        if (strtotime((string) $datePrestation) < strtotime('+1 day')) {
-            $this->flash('error', 'La date de prestation doit être au moins le lendemain.');
-            $this->redirect('/commander/' . $menu['menu_id']);
-        }
+        $this->flash('success', 'Commande enregistrée ! Numéro : ' . $result['numero']);
+        $this->redirect('/mon-espace/commandes/' . urlencode($result['numero']));
+    }
 
-        $prix = Commande::calculerPrix($menu, $nbPersonnes, (string) $ville, $distanceKm);
+    /**
+     * Envoie le mail de confirmation. Volontairement private au controller car
+     * c'est un effet de bord HTTP (l'utilisateur connecté reçoit un mail).
+     */
+    private function envoyerMailConfirmation(array $result, ?array $user): void
+    {
+        if (!$user) return;
 
-        $numero = numero_commande();
-        Commande::create([
-            'numero_commande'    => $numero,
-            'utilisateur_id'     => Auth::id(),
-            'menu_id'            => $menu['menu_id'],
-            'date_prestation'    => $datePrestation,
-            'heure_livraison'    => $heureLivraison,
-            'adresse_livraison'  => $adresse,
-            'ville_livraison'    => $ville,
-            'distance_km'        => $distanceKm,
-            'nombre_personne'    => $nbPersonnes,
-            'prix_menu'          => $prix['prix_menu'],
-            'prix_livraison'     => $prix['prix_livraison'],
-            'reduction'          => $prix['reduction'],
-            'prix_total'         => $prix['prix_total'],
-        ]);
+        $menu = $result['menu'];
+        $prix = $result['prix'];
+        $numero = $result['numero'];
 
-        // Statistiques NoSQL
-        Stats::incrementCommandeMenu((int) $menu['menu_id'], $menu['titre'], $prix['prix_total']);
-        Stats::log('commande_creee', ['numero' => $numero, 'user_id' => Auth::id()]);
-
-        // Mail de confirmation
-        $user = Auth::user();
         Mailer::send(
             (string) $user['email'],
             'Confirmation de votre commande ' . $numero,
@@ -121,14 +110,8 @@ final class CommandeController extends Controller
              <p>Bonjour ' . e($user['prenom']) . ',</p>
              <p>Votre commande <strong>' . e($numero) . '</strong> a bien été reçue.</p>
              <p><strong>Menu :</strong> ' . e($menu['titre']) . '<br>
-                <strong>Date :</strong> ' . e((string) $datePrestation) . ' à ' . e((string) $heureLivraison) . '<br>
-                <strong>Adresse :</strong> ' . e((string) $adresse) . ', ' . e((string) $ville) . '<br>
-                <strong>Personnes :</strong> ' . $nbPersonnes . '<br>
                 <strong>Total :</strong> ' . format_prix($prix['prix_total']) . '</p>
              <p>Notre équipe vous contactera pour valider votre commande.</p>'
         );
-
-        $this->flash('success', 'Commande enregistrée ! Numéro : ' . $numero);
-        $this->redirect('/mon-espace/commandes/' . urlencode($numero));
     }
 }

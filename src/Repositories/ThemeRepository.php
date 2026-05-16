@@ -1,16 +1,16 @@
 <?php
 declare(strict_types=1);
 
-namespace App\Models;
+namespace App\Repositories;
 
 use App\Core\Database;
 
-final class Allergene
+final class ThemeRepository
 {
     public static function all(): array
     {
         return Database::getInstance()
-            ->query('SELECT * FROM allergene ORDER BY libelle')
+            ->query('SELECT * FROM theme ORDER BY libelle')
             ->fetchAll();
     }
 }

@@ -5,7 +5,7 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Core\Mailer;
-use App\Models\ContactMessage;
+use App\Repositories\ContactMessageRepository;
 
 final class ContactController extends Controller
 {
@@ -30,7 +30,7 @@ final class ContactController extends Controller
             $this->redirect('/contact');
         }
 
-        ContactMessage::create((string) $titre, (string) $description, (string) $email);
+        ContactMessageRepository::create((string) $titre, (string) $description, (string) $email);
 
         $config = require __DIR__ . '/../../config/config.php';
         Mailer::send(

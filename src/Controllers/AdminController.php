@@ -6,22 +6,27 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Mailer;
 use App\Core\Security;
-use App\Models\Stats;
-use App\Models\User;
+use App\Repositories\MenuRepository;
+use App\Repositories\StatsRepository;
+use App\Repositories\UserRepository;
+use App\Services\StatsService;
 use PDOException;
 
 final class AdminController extends EmployeController
 {
+    private StatsService $statsService;
+
     public function __construct()
     {
         Auth::requireRole('administrateur');
+        $this->statsService = new StatsService();
     }
 
     public function dashboard(): void
     {
         $this->view('admin/dashboard', [
             'pageTitle' => 'Espace administrateur',
-            'stats'     => Stats::commandesParMenu(),
+            'stats'     => $this->statsService->dashboard(),
         ]);
     }
 
@@ -29,7 +34,7 @@ final class AdminController extends EmployeController
     {
         $this->view('admin/employes', [
             'pageTitle' => 'Gérer les employés',
-            'employes'  => User::listEmployes(),
+            'employes'  => UserRepository::listEmployes(),
         ]);
     }
 
@@ -51,7 +56,7 @@ final class AdminController extends EmployeController
         }
 
         try {
-            User::create([
+            UserRepository::create([
                 'email'           => $email,
                 'password'        => Security::hashPassword($password),
                 'prenom'          => $prenom,
@@ -78,7 +83,7 @@ final class AdminController extends EmployeController
              <p>Pour obtenir votre mot de passe, merci de vous rapprocher de l\'administrateur.</p>'
         );
 
-        Stats::log('employe_cree', ['email' => $email, 'admin_id' => Auth::id()]);
+        StatsRepository::log('employe_cree', ['email' => $email, 'admin_id' => Auth::id()]);
         $this->flash('success', 'Employé créé. Le mot de passe n\'est PAS envoyé par mail (à transmettre en main propre).');
         $this->redirect('/admin/employes');
     }
@@ -86,7 +91,7 @@ final class AdminController extends EmployeController
     public function desactiverEmploye(string $id): void
     {
         $this->verifyCsrf();
-        User::setActive((int) $id, false);
+        UserRepository::setActive((int) $id, false);
         $this->flash('success', 'Compte désactivé.');
         $this->redirect('/admin/employes');
     }
@@ -94,7 +99,7 @@ final class AdminController extends EmployeController
     public function reactiverEmploye(string $id): void
     {
         $this->verifyCsrf();
-        User::setActive((int) $id, true);
+        UserRepository::setActive((int) $id, true);
         $this->flash('success', 'Compte réactivé.');
         $this->redirect('/admin/employes');
     }
@@ -103,13 +108,13 @@ final class AdminController extends EmployeController
     {
         $this->view('admin/statistiques', [
             'pageTitle' => 'Statistiques',
-            'stats'     => Stats::commandesParMenu(),
+            'stats'     => $this->statsService->dashboard(),
         ]);
     }
 
     public function apiStats(): void
     {
-        $this->json(Stats::commandesParMenu());
+        $this->json($this->statsService->dashboard());
     }
 
     public function chiffreAffaires(): void
@@ -120,8 +125,8 @@ final class AdminController extends EmployeController
 
         $this->view('admin/chiffre-affaires', [
             'pageTitle' => 'Chiffre d\'affaires',
-            'stats'     => Stats::chiffreAffairesParMenu($debut, $fin, $menuId),
-            'menus'     => \App\Models\Menu::search(),
+            'stats'     => $this->statsService->chiffreAffaires($debut, $fin, $menuId),
+            'menus'     => MenuRepository::search(),
             'filtres'   => ['debut' => $debut, 'fin' => $fin, 'menu_id' => $menuId],
         ]);
     }

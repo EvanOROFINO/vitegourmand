@@ -6,34 +6,41 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Mailer;
-use App\Models\Avis;
-use App\Models\Commande;
-use App\Models\Horaire;
-use App\Models\Menu;
-use App\Models\Plat;
-use App\Models\Regime;
-use App\Models\Stats;
-use App\Models\Theme;
+use App\Repositories\AvisRepository;
+use App\Repositories\CommandeRepository;
+use App\Repositories\HoraireRepository;
+use App\Repositories\MenuRepository;
+use App\Repositories\PlatRepository;
+use App\Repositories\RegimeRepository;
+use App\Repositories\ThemeRepository;
+use App\Services\AvisService;
+use App\Services\CommandeService;
+use DomainException;
 
 class EmployeController extends Controller
 {
+    private CommandeService $commandeService;
+    private AvisService $avisService;
+
     public function __construct()
     {
         Auth::requireRole(['employe', 'administrateur']);
+        $this->commandeService = new CommandeService();
+        $this->avisService     = new AvisService();
     }
 
     public function dashboard(): void
     {
         $statut    = $_GET['statut'] ?? null;
         $recherche = $_GET['q']      ?? null;
-        $commandes = Commande::listForStaff($statut, $recherche);
+        $commandes = CommandeRepository::listForStaff($statut, $recherche);
 
         $this->view('employe/dashboard', [
             'pageTitle'    => 'Espace employé',
             'commandes'    => $commandes,
             'statut'       => $statut,
             'recherche'    => $recherche,
-            'nbAvisAttente'=> count(Avis::enAttente()),
+            'nbAvisAttente'=> count(AvisRepository::enAttente()),
         ]);
     }
 
@@ -43,42 +50,49 @@ class EmployeController extends Controller
     public function changerStatut(string $numero): void
     {
         $this->verifyCsrf();
-        $statut = $this->input('statut');
+        $statut = (string) $this->input('statut');
 
-        $statutsValides = ['accepte','en_preparation','en_cours_de_livraison','livre','en_attente_retour_materiel','terminee'];
-        if (!in_array($statut, $statutsValides, true)) {
-            $this->flash('error', 'Statut invalide.');
+        // La logique métier (validation transition, log) est dans le Service
+        try {
+            $this->commandeService->changerStatut($numero, $statut, $this->input('commentaire'));
+        } catch (DomainException $e) {
+            $this->flash('error', $e->getMessage());
             $this->redirect('/employe/commandes');
         }
 
-        Commande::changerStatut($numero, (string) $statut, $this->input('commentaire'));
+        // Effets de bord HTTP : envoi de mails sur certains statuts
+        $this->envoyerMailsTransition($numero, $statut);
 
-        // Mails automatiques sur certains statuts
-        $commande = Commande::find($numero);
-        if ($commande) {
-            if ($statut === 'en_attente_retour_materiel' && $commande['pret_materiel']) {
-                Mailer::send(
-                    $commande['email'],
-                    'Restitution du matériel — commande ' . $numero,
-                    '<p>Bonjour ' . e($commande['prenom']) . ',</p>
-                     <p>Votre commande est livrée. Du matériel vous a été prêté.</p>
-                     <p><strong>Si le matériel n\'est pas restitué sous 10 jours ouvrés, vous devrez vous acquitter de 600 €</strong> (mentionné dans nos CGV).</p>
-                     <p>Pour rendre le matériel, merci de nous contacter.</p>'
-                );
-            }
-            if ($statut === 'terminee') {
-                Mailer::send(
-                    $commande['email'],
-                    'Votre commande est terminée — laissez votre avis',
-                    '<p>Bonjour ' . e($commande['prenom']) . ',</p>
-                     <p>Votre commande ' . e($numero) . ' est terminée. Connectez-vous à votre espace pour laisser un avis !</p>'
-                );
-            }
-        }
-
-        Stats::log('changement_statut', ['numero' => $numero, 'statut' => $statut, 'employe_id' => Auth::id()]);
-        $this->flash('success', 'Statut mis à jour : ' . format_statut((string) $statut));
+        $this->flash('success', 'Statut mis à jour : ' . format_statut($statut));
         $this->redirect('/employe/commandes');
+    }
+
+    /**
+     * Effet de bord HTTP : envoie les mails automatiques liés à certains statuts.
+     */
+    private function envoyerMailsTransition(string $numero, string $statut): void
+    {
+        $commande = CommandeRepository::find($numero);
+        if (!$commande) return;
+
+        if ($statut === 'en_attente_retour_materiel' && $commande['pret_materiel']) {
+            Mailer::send(
+                $commande['email'],
+                'Restitution du matériel — commande ' . $numero,
+                '<p>Bonjour ' . e($commande['prenom']) . ',</p>
+                 <p>Votre commande est livrée. Du matériel vous a été prêté.</p>
+                 <p><strong>Si le matériel n\'est pas restitué sous 10 jours ouvrés, vous devrez vous acquitter de 600 €</strong> (mentionné dans nos CGV).</p>
+                 <p>Pour rendre le matériel, merci de nous contacter.</p>'
+            );
+        }
+        if ($statut === 'terminee') {
+            Mailer::send(
+                $commande['email'],
+                'Votre commande est terminée — laissez votre avis',
+                '<p>Bonjour ' . e($commande['prenom']) . ',</p>
+                 <p>Votre commande ' . e($numero) . ' est terminée. Connectez-vous à votre espace pour laisser un avis !</p>'
+            );
+        }
     }
 
     public function annulerCommande(string $numero): void
@@ -92,7 +106,7 @@ class EmployeController extends Controller
             $this->redirect('/employe/commandes');
         }
 
-        Commande::annuler($numero, (string) $motif, (string) $modeContact);
+        CommandeRepository::annuler($numero, (string) $motif, (string) $modeContact);
         $this->flash('success', 'Commande annulée.');
         $this->redirect('/employe/commandes');
     }
@@ -102,7 +116,7 @@ class EmployeController extends Controller
     {
         $this->view('employe/menus', [
             'pageTitle' => 'Gérer les menus',
-            'menus'     => Menu::search(),
+            'menus'     => MenuRepository::search(),
         ]);
     }
 
@@ -111,16 +125,16 @@ class EmployeController extends Controller
         $this->view('employe/menu-form', [
             'pageTitle' => 'Nouveau menu',
             'menu'      => null,
-            'themes'    => Theme::all(),
-            'regimes'   => Regime::all(),
-            'plats'     => Plat::all(),
+            'themes'    => ThemeRepository::all(),
+            'regimes'   => RegimeRepository::all(),
+            'plats'     => PlatRepository::all(),
         ]);
     }
 
     public function createMenu(): void
     {
         $this->verifyCsrf();
-        $menuId = Menu::create([
+        $menuId = MenuRepository::create([
             'titre'                   => $this->input('titre'),
             'description'             => $this->input('description'),
             'nombre_personne_minimum' => (int) ($_POST['nombre_personne_minimum'] ?? 0),
@@ -131,14 +145,14 @@ class EmployeController extends Controller
             'regime_id'               => (int) ($_POST['regime_id'] ?? 0),
             'actif'                   => !empty($_POST['actif']),
         ]);
-        Menu::setPlats($menuId, $_POST['plats'] ?? []);
+        MenuRepository::setPlats($menuId, $_POST['plats'] ?? []);
         $this->flash('success', 'Menu créé.');
         $this->redirect('/employe/menus');
     }
 
     public function editMenu(string $id): void
     {
-        $menu = Menu::find((int) $id);
+        $menu = MenuRepository::find((int) $id);
         if (!$menu) {
             http_response_code(404);
             require __DIR__ . '/../../views/errors/404.php';
@@ -147,16 +161,16 @@ class EmployeController extends Controller
         $this->view('employe/menu-form', [
             'pageTitle' => 'Modifier : ' . $menu['titre'],
             'menu'      => $menu,
-            'themes'    => Theme::all(),
-            'regimes'   => Regime::all(),
-            'plats'     => Plat::all(),
+            'themes'    => ThemeRepository::all(),
+            'regimes'   => RegimeRepository::all(),
+            'plats'     => PlatRepository::all(),
         ]);
     }
 
     public function updateMenu(string $id): void
     {
         $this->verifyCsrf();
-        Menu::update((int) $id, [
+        MenuRepository::update((int) $id, [
             'titre'                   => $this->input('titre'),
             'description'             => $this->input('description'),
             'nombre_personne_minimum' => (int) ($_POST['nombre_personne_minimum'] ?? 0),
@@ -167,7 +181,7 @@ class EmployeController extends Controller
             'regime_id'               => (int) ($_POST['regime_id'] ?? 0),
             'actif'                   => !empty($_POST['actif']),
         ]);
-        Menu::setPlats((int) $id, $_POST['plats'] ?? []);
+        MenuRepository::setPlats((int) $id, $_POST['plats'] ?? []);
         $this->flash('success', 'Menu mis à jour.');
         $this->redirect('/employe/menus');
     }
@@ -175,7 +189,7 @@ class EmployeController extends Controller
     public function deleteMenu(string $id): void
     {
         $this->verifyCsrf();
-        Menu::delete((int) $id);
+        MenuRepository::delete((int) $id);
         $this->flash('success', 'Menu désactivé.');
         $this->redirect('/employe/menus');
     }
@@ -185,14 +199,14 @@ class EmployeController extends Controller
     {
         $this->view('employe/plats', [
             'pageTitle' => 'Gérer les plats',
-            'plats'     => Plat::all(),
+            'plats'     => PlatRepository::all(),
         ]);
     }
 
     public function createPlat(): void
     {
         $this->verifyCsrf();
-        Plat::create([
+        PlatRepository::create([
             'titre' => $this->input('titre'),
             'type'  => $this->input('type'),
             'photo' => null,
@@ -204,7 +218,7 @@ class EmployeController extends Controller
     public function deletePlat(string $id): void
     {
         $this->verifyCsrf();
-        Plat::delete((int) $id);
+        PlatRepository::delete((int) $id);
         $this->flash('success', 'Plat supprimé.');
         $this->redirect('/employe/plats');
     }
@@ -214,14 +228,14 @@ class EmployeController extends Controller
     {
         $this->view('employe/horaires', [
             'pageTitle' => 'Gérer les horaires',
-            'horaires'  => Horaire::all(),
+            'horaires'  => HoraireRepository::all(),
         ]);
     }
 
     public function updateHoraire(string $id): void
     {
         $this->verifyCsrf();
-        Horaire::update(
+        HoraireRepository::update(
             (int) $id,
             (string) $this->input('jour'),
             (string) $this->input('heure_ouverture'),
@@ -231,19 +245,19 @@ class EmployeController extends Controller
         $this->redirect('/employe/horaires');
     }
 
-    // ----- Avis -----
+    // ----- Avis (modération via AvisService) -----
     public function avis(): void
     {
         $this->view('employe/avis', [
             'pageTitle' => 'Avis en attente',
-            'avis'      => Avis::enAttente(),
+            'avis'      => $this->avisService->listerEnAttente(),
         ]);
     }
 
     public function validerAvis(string $id): void
     {
         $this->verifyCsrf();
-        Avis::valider((int) $id);
+        $this->avisService->moderer((int) $id, true, (int) Auth::id());
         $this->flash('success', 'Avis validé et publié.');
         $this->redirect('/employe/avis');
     }
@@ -251,7 +265,7 @@ class EmployeController extends Controller
     public function refuserAvis(string $id): void
     {
         $this->verifyCsrf();
-        Avis::refuser((int) $id);
+        $this->avisService->moderer((int) $id, false, (int) Auth::id());
         $this->flash('success', 'Avis refusé.');
         $this->redirect('/employe/avis');
     }

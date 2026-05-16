@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace App\Models;
+namespace App\Repositories;
 
 use App\Core\Database;
 
-final class ContactMessage
+final class ContactMessageRepository
 {
     public static function create(string $titre, string $description, string $email): bool
     {

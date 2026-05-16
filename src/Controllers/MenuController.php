@@ -4,9 +4,9 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Models\Menu;
-use App\Models\Regime;
-use App\Models\Theme;
+use App\Repositories\MenuRepository;
+use App\Repositories\RegimeRepository;
+use App\Repositories\ThemeRepository;
 
 final class MenuController extends Controller
 {
@@ -14,9 +14,9 @@ final class MenuController extends Controller
     {
         $this->view('menu/index', [
             'pageTitle' => 'Nos menus',
-            'menus'     => Menu::search(),
-            'themes'    => Theme::all(),
-            'regimes'   => Regime::all(),
+            'menus'     => MenuRepository::search(),
+            'themes'    => ThemeRepository::all(),
+            'regimes'   => RegimeRepository::all(),
         ]);
     }
 
@@ -34,12 +34,12 @@ final class MenuController extends Controller
         ];
         $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
 
-        $this->json(Menu::search($filters));
+        $this->json(MenuRepository::search($filters));
     }
 
     public function show(string $id): void
     {
-        $menu = Menu::find((int) $id);
+        $menu = MenuRepository::find((int) $id);
         if (!$menu) {
             http_response_code(404);
             require __DIR__ . '/../../views/errors/404.php';

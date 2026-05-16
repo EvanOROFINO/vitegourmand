@@ -7,7 +7,7 @@ use App\Core\Auth;
 use App\Core\Controller;
 use App\Core\Mailer;
 use App\Core\Security;
-use App\Models\User;
+use App\Repositories\UserRepository;
 use PDOException;
 
 final class AuthController extends Controller
@@ -31,7 +31,7 @@ final class AuthController extends Controller
         $password = $_POST['password'] ?? '';
         $next     = $_POST['next'] ?? '/mon-espace';
 
-        $user = User::findByEmail((string) $email);
+        $user = UserRepository::findByEmail((string) $email);
         if (!$user || !Security::verifyPassword($password, $user['password'])) {
             $this->flash('error', 'Identifiants incorrects ou compte désactivé.');
             $this->redirect('/login');
@@ -88,7 +88,7 @@ final class AuthController extends Controller
         $data['password'] = Security::hashPassword($password);
 
         try {
-            User::create($data);
+            UserRepository::create($data);
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
                 $this->flash('error', 'Cette adresse e-mail est déjà utilisée.');
@@ -127,13 +127,13 @@ final class AuthController extends Controller
     {
         $this->verifyCsrf();
         $email = $this->input('email');
-        $user  = User::findByEmail((string) $email);
+        $user  = UserRepository::findByEmail((string) $email);
 
         // Réponse identique pour ne pas révéler l'existence d'un compte
         if ($user) {
             $token   = Security::randomToken(32);
             $expires = date('Y-m-d H:i:s', time() + 3600);
-            User::setResetToken((int) $user['utilisateur_id'], $token, $expires);
+            UserRepository::setResetToken((int) $user['utilisateur_id'], $token, $expires);
 
             $config = require __DIR__ . '/../../config/config.php';
             $link   = rtrim($config['app']['url'], '/') . '/reinitialiser/' . $token;
@@ -155,7 +155,7 @@ final class AuthController extends Controller
 
     public function showReset(string $token): void
     {
-        $user = User::findByResetToken($token);
+        $user = UserRepository::findByResetToken($token);
         if (!$user) {
             $this->flash('error', 'Lien invalide ou expiré.');
             $this->redirect('/login');
@@ -170,7 +170,7 @@ final class AuthController extends Controller
         $password        = $_POST['password'] ?? '';
         $passwordConfirm = $_POST['password_confirm'] ?? '';
 
-        $user = User::findByResetToken($token);
+        $user = UserRepository::findByResetToken($token);
         if (!$user) {
             $this->flash('error', 'Lien invalide ou expiré.');
             $this->redirect('/login');
@@ -184,7 +184,7 @@ final class AuthController extends Controller
             $this->redirect('/reinitialiser/' . urlencode($token));
         }
 
-        User::updatePassword((int) $user['utilisateur_id'], Security::hashPassword($password));
+        UserRepository::updatePassword((int) $user['utilisateur_id'], Security::hashPassword($password));
         $this->flash('success', 'Mot de passe modifié. Vous pouvez vous connecter.');
         $this->redirect('/login');
     }

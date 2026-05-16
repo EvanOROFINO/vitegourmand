@@ -11,12 +11,12 @@
 
 declare(strict_types=1);
 
-namespace App\Models;
+namespace App\Repositories;
 
 use App\Core\Mongo;
 use MongoDB\BSON\UTCDateTime;
 
-final class Stats
+final class StatsRepository
 {
     /**
      * Incrémente le compteur de commandes pour un menu donné.

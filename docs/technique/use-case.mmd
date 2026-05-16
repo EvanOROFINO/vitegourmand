@@ -1,0 +1,54 @@
+flowchart LR
+    %% Acteurs
+    V((Visiteur))
+    U((Utilisateur))
+    E((Employé))
+    A((Administrateur))
+
+    %% Cas d'utilisation
+    subgraph ViteGourmand
+      UC1[Consulter menus]
+      UC2[Filtrer menus]
+      UC3[Créer un compte]
+      UC4[Se connecter]
+      UC5[Voir détail menu]
+      UC6[Passer une commande]
+      UC7[Suivre mes commandes]
+      UC8[Annuler une commande]
+      UC9[Déposer un avis]
+      UC10[Mettre à jour mon profil]
+      UC11[Gérer les menus]
+      UC12[Gérer les commandes]
+      UC13[Modérer les avis]
+      UC14[Gérer les employés]
+      UC15[Voir statistiques]
+    end
+
+    %% Visiteur
+    V --> UC1
+    V --> UC2
+    V --> UC3
+    V --> UC4
+    V --> UC5
+
+    %% Utilisateur (étend Visiteur)
+    U -. herite .-> V
+    U --> UC6
+    U --> UC7
+    U --> UC8
+    U --> UC9
+    U --> UC10
+
+    %% Employé (étend Utilisateur)
+    E -. herite .-> U
+    E --> UC11
+    E --> UC12
+    E --> UC13
+
+    %% Administrateur (étend Employé)
+    A -. herite .-> E
+    A --> UC14
+    A --> UC15
+
+    classDef ac fill:#2E7D32,stroke:#1B5E20,color:#fff,stroke-width:2px;
+    class V,U,E,A ac;

@@ -1,0 +1,112 @@
+erDiagram
+    UTILISATEUR ||--o{ POSSEDE          : a_role
+    ROLE        ||--o{ POSSEDE          : attribue
+    UTILISATEUR ||--o{ COMMANDE         : passe
+    MENU        ||--o{ COMMANDE         : concerne
+    MENU        ||--o{ MENU_IMAGE       : illustre_par
+    MENU        ||--o{ MENU_PLAT        : compose_de
+    PLAT        ||--o{ MENU_PLAT        : appartient_a
+    PLAT        ||--o{ PLAT_ALLERGENE   : contient
+    ALLERGENE   ||--o{ PLAT_ALLERGENE   : present_dans
+    THEME       ||--o{ MENU             : categorise
+    REGIME      ||--o{ MENU             : qualifie
+    UTILISATEUR ||--o{ AVIS             : depose
+    COMMANDE    ||--o| AVIS             : note
+    COMMANDE    ||--o{ COMMANDE_STATUT_HISTORIQUE : trace
+
+    UTILISATEUR {
+        int utilisateur_id
+        varchar email
+        varchar password
+        varchar prenom
+        varchar nom
+        varchar telephone
+        varchar adresse_postale
+        varchar ville
+        varchar pays
+        boolean actif
+    }
+    ROLE {
+        int role_id
+        varchar libelle
+    }
+    POSSEDE {
+        int utilisateur_id
+        int role_id
+    }
+    MENU {
+        int menu_id
+        varchar titre
+        text description
+        int nombre_personne_minimum
+        decimal prix_par_personne
+        text conditions_menu
+        int quantite_restante
+        int theme_id
+        int regime_id
+        boolean actif
+    }
+    THEME {
+        int theme_id
+        varchar libelle
+    }
+    REGIME {
+        int regime_id
+        varchar libelle
+    }
+    MENU_IMAGE {
+        int image_id
+        int menu_id
+        varchar chemin
+        varchar alt_texte
+        int ordre
+    }
+    PLAT {
+        int plat_id
+        varchar titre
+        varchar photo
+        enum type
+    }
+    MENU_PLAT {
+        int menu_id
+        int plat_id
+    }
+    ALLERGENE {
+        int allergene_id
+        varchar libelle
+    }
+    PLAT_ALLERGENE {
+        int plat_id
+        int allergene_id
+    }
+    COMMANDE {
+        varchar numero_commande
+        int utilisateur_id
+        int menu_id
+        date date_prestation
+        time heure_livraison
+        varchar adresse_livraison
+        varchar ville_livraison
+        decimal distance_km
+        int nombre_personne
+        decimal prix_menu
+        decimal prix_livraison
+        decimal reduction
+        decimal prix_total
+        enum statut
+    }
+    AVIS {
+        int avis_id
+        int utilisateur_id
+        varchar numero_commande
+        int note
+        text description
+        enum statut
+    }
+    COMMANDE_STATUT_HISTORIQUE {
+        int historique_id
+        varchar numero_commande
+        enum statut
+        text commentaire
+        datetime date_changement
+    }

@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace App\Models;
+namespace App\Repositories;
 
 use App\Core\Database;
 
-final class Avis
+final class AvisRepository
 {
     public static function create(int $userId, string $numeroCommande, int $note, string $description): bool
     {

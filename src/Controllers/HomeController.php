@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Models\Avis;
+use App\Repositories\AvisRepository;
 
 final class HomeController extends Controller
 {
@@ -12,7 +12,7 @@ final class HomeController extends Controller
     {
         $this->view('home/index', [
             'pageTitle' => 'Accueil',
-            'avis'      => Avis::valides(6),
+            'avis'      => AvisRepository::valides(6),
         ]);
     }
 
