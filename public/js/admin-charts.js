@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const stats = window.STATS || [];
+    const stats = window.STATS?.commandes_par_menu || [];
     const canvas = document.getElementById('chart-commandes');
     if (!canvas || !stats.length) return;
 
