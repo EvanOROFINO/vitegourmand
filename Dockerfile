@@ -2,9 +2,10 @@
 FROM php:8.2-apache
 
 # Dépendances système + extensions PHP
+# yes '' pipe des réponses vides à pecl (qui peut prompter interactivement)
 RUN apt-get update && apt-get install -y \
         libssl-dev libcurl4-openssl-dev pkg-config zip unzip git \
-    && pecl install mongodb \
+    && yes '' | pecl install mongodb \
     && docker-php-ext-enable mongodb \
     && docker-php-ext-install pdo_mysql \
     && a2enmod rewrite headers \
@@ -21,7 +22,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Copie des sources et installation des dépendances
 WORKDIR /var/www/html
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+# --ignore-platform-req=ext-mongodb : l'extension est bien installée par pecl
+# (cf. plus haut) mais peut ne pas être chargée dans le contexte CLI où tourne
+# composer pendant le build. Elle sera bien présente à l'exécution Apache.
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --ignore-platform-req=ext-mongodb
 COPY . .
 
 # Permissions
