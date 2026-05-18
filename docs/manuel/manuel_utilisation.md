@@ -6,7 +6,7 @@ Application web de prise de commande pour le traiteur Vite & Gourmand (Bordeaux)
 
 ## 1. Accès à l'application
 
-- **URL en ligne** : *(à compléter après déploiement)*
+- **URL en ligne** : https://vitegourmand-s4in.onrender.com
 - **URL en local** : http://localhost:8000
 
 ---

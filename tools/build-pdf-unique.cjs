@@ -103,7 +103,7 @@ let body = `
   <h2>Liens des livrables</h2>
   <div style="background:#FFEBEE;padding:1.5rem 2rem;border-radius:8px;border-left:5px solid #8B1A1A;margin-bottom:1.5rem;font-size:11pt;line-height:2">
     <p style="margin:.3rem 0"><strong>🌐 Application déployée :</strong><br>
-       <em>Déploiement sur Render en cours — voir docs/deploiement/GUIDE_DEPLOIEMENT_RENDER.md</em></p>
+       <a href="https://vitegourmand-s4in.onrender.com">https://vitegourmand-s4in.onrender.com</a></p>
     <p style="margin:.3rem 0"><strong>💻 Code source GitHub PUBLIC :</strong><br>
        <a href="https://github.com/EvanOROFINO/vitegourmand">https://github.com/EvanOROFINO/vitegourmand</a></p>
   </div>
