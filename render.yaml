@@ -24,8 +24,6 @@ services:
         value: vitegourmand
       - key: DB_USER
         value: vitegourmand
-      - key: DB_PASSWORD
-        value: demo-base-locale
       - key: MONGO_URI
         sync: false
       - key: MONGO_DB
