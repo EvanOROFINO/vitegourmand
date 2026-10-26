@@ -15,16 +15,17 @@ services:
         sync: false
       - key: APP_SECRET
         generateValue: true
+      # Base MariaDB embarquee dans le conteneur (voir docker/entrypoint.sh)
       - key: DB_HOST
-        sync: false
+        value: "127.0.0.1"
       - key: DB_PORT
         value: "3306"
       - key: DB_NAME
-        sync: false
+        value: vitegourmand
       - key: DB_USER
-        sync: false
+        value: vitegourmand
       - key: DB_PASSWORD
-        sync: false
+        value: demo-base-locale
       - key: MONGO_URI
         sync: false
       - key: MONGO_DB
